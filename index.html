@@ -48,6 +48,8 @@ label.champ input, label.champ textarea, label.champ select, input.plein, textar
   display: block; width: 100%; margin-top: 4px; font: inherit; font-size: 16px; color: var(--texte);
   background: var(--fond); border: 1px solid var(--bord); border-radius: 8px; padding: 9px 10px; }
 textarea { min-height: 64px; resize: vertical; }
+textarea.auto { min-height: 0; resize: none; overflow: hidden; line-height: 1.35; }
+.element textarea.auto { margin-top: 8px; }
 .ligne { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .etire { flex: 1; min-width: 0; }
 .element .nom button.danger { color: var(--doux); }

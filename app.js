@@ -88,7 +88,7 @@ function setPath(obj, path, val) {
 
 // --- État de l'interface ------------------------------------------------------------------------------
 const ui = { page: "accueil", edl: null, piecesOuvertes: new Set(), pdf: null };
-let reglages = { nom: "", adresse: "", email: "", ville: "" };
+let reglages = { nom: "", prenom: "", telephone: "", adresse: "", email: "", ville: "" };
 let donnees = null;              // export du logiciel de gestion
 const urlsPhotos = new Map();     // id -> objectURL
 
@@ -110,11 +110,30 @@ function sauver(immediat) {
 document.addEventListener("visibilitychange", () => { if (document.hidden) sauver(true); });
 
 const verrouille = e => Object.keys(e.signatures || {}).length > 0;
+const nomComplet = p => [p?.prenom, p?.nom].map(s => (s || "").trim()).filter(Boolean).join(" ");
 function signataires(e) {
-  return [{ cle: "bailleur", role: "Propriétaire / bailleur", nom: e.bailleur.nom },
-    ...e.locataires.map((l, i) => ({ cle: "loc" + i, role: e.locataires.length > 1 ? `Locataire ${i + 1}` : "Locataire", nom: l.nom })),
-    ...e.cautions.map((c, i) => ({ cle: "cau" + i, caution: true, nom: c.nom,
+  return [{ cle: "bailleur", role: "Propriétaire / bailleur", nom: nomComplet(e.bailleur) },
+    ...e.locataires.map((l, i) => ({ cle: "loc" + i, role: e.locataires.length > 1 ? `Locataire ${i + 1}` : "Locataire", nom: nomComplet(l) })),
+    ...e.cautions.map((c, i) => ({ cle: "cau" + i, caution: true, nom: nomComplet(c),
       role: (e.cautions.length > 1 ? `Caution ${i + 1}` : "Caution") + (c.pour ? ` de ${c.pour}` : "") }))];
+}
+
+/** Champs d'une personne : nom, prénom, téléphone, mail (+ date et lieu de naissance). */
+function champsPersonne(chemin, p, { naissance = false, adresse = false } = {}) {
+  const champ = (cle, libelle, type = "text", extra = "") =>
+    `<label class="champ">${libelle}<input type="${type}" ${extra} data-bind="${chemin}.${cle}" value="${esc(p[cle])}"></label>`;
+  return `<div class="deux">${champ("nom", "Nom")}${champ("prenom", "Prénom")}</div>
+    <div class="deux">${champ("telephone", "Téléphone", "tel", 'inputmode="tel" autocomplete="off"')}${champ("email", "Mail", "email")}</div>
+    ${naissance ? `<div class="deux">${champ("naissanceDate", "Date de naissance", "date")}${champ("naissanceLieu", "Lieu de naissance")}</div>` : ""}
+    ${adresse ? champ("adresse", "Adresse") : ""}`;
+}
+const personneVide = () => ({ nom: "", prenom: "", telephone: "", email: "", naissanceDate: "", naissanceLieu: "" });
+
+/** Complète les états des lieux créés avec une version précédente de l'appli. */
+function normaliser(e) {
+  e.cautions ||= [];
+  if (e.locatairePrecedent === undefined) e.locatairePrecedent = null;
+  return e;
 }
 
 // --- Rendu --------------------------------------------------------------------------------------------
@@ -136,7 +155,7 @@ async function rendreAccueil(app) {
     <div class="liste-edl">
     ${liste.length ? liste.map(e => `
       <button class="carte" data-action="ouvrir" data-id="${e.id}">
-        <div class="ligne"><b class="etire">${esc(e.locataires.map(l => l.nom).join(", ") || "Sans locataire")}</b>
+        <div class="ligne"><b class="etire">${esc(e.locataires.map(nomComplet).filter(Boolean).join(", ") || "Sans locataire")}</b>
           <span class="puce ${e.statut === "signe" ? "signe" : ""}">${e.statut === "signe" ? "Signé" : verrouille(e) ? "Signature en cours" : "Brouillon"}</span></div>
         <div class="doux">État des lieux de ${libelleType(e)} · ${fmtDate(e.date)}</div>
         <div class="doux">${esc([e.logement, e.adresse].filter(Boolean).join(" — "))}</div>
@@ -156,7 +175,9 @@ async function rendreReglages(app) {
   <header><button class="lien" data-action="accueil">‹ Retour</button><h1>Réglages</h1></header>
   <main>
     <div class="carte"><h2>Propriétaire (valeurs par défaut)</h2>
-      <label class="champ">Nom<input data-reglage="nom" value="${esc(reglages.nom)}"></label>
+      <div class="deux"><label class="champ">Nom<input data-reglage="nom" value="${esc(reglages.nom)}"></label>
+      <label class="champ">Prénom<input data-reglage="prenom" value="${esc(reglages.prenom)}"></label></div>
+      <label class="champ">Téléphone<input type="tel" data-reglage="telephone" value="${esc(reglages.telephone)}"></label>
       <label class="champ">Adresse<textarea data-reglage="adresse">${esc(reglages.adresse)}</textarea></label>
       <label class="champ">Adresse mail (pour recevoir une copie)<input type="email" data-reglage="email" value="${esc(reglages.email)}"></label>
       <label class="champ">Ville (« Fait à … »)<input data-reglage="ville" value="${esc(reglages.ville)}"></label>
@@ -194,7 +215,7 @@ function rendreEdl(app) {
   const nbSig = sigs.filter(s => e.signatures[s.cle]).length;
   app.innerHTML = `
   <header><button class="lien" data-action="accueil">‹ Liste</button>
-    <h1>${e.type === "sortie" ? "Sortie" : "Entrée"} – ${esc(e.locataires[0]?.nom || "")}</h1>
+    <h1>${e.type === "sortie" ? "Sortie" : "Entrée"} – ${esc(nomComplet(e.locataires[0]))}</h1>
     <button data-action="menu-edl" aria-label="Plus">⋯</button></header>
   <main>
   ${bloque ? `<div class="verrou">🔒 ${e.statut === "signe" ? "Signé par toutes les parties" : `Signature en cours (${nbSig}/${sigs.length})`} :
@@ -212,15 +233,13 @@ function rendreEdl(app) {
       <label class="champ">Date d'entrée dans les lieux<input type="date" data-bind="dateEntree" value="${esc(e.dateEntree)}"></label>
     </div>
     <div class="carte"><h2>Propriétaire</h2>
-      <label class="champ">Nom<input data-bind="bailleur.nom" value="${esc(e.bailleur.nom)}"></label>
-      <label class="champ">Adresse<input data-bind="bailleur.adresse" value="${esc(e.bailleur.adresse)}"></label>
-      <label class="champ">Mail<input type="email" data-bind="bailleur.email" value="${esc(e.bailleur.email)}"></label>
+      ${champsPersonne("bailleur", e.bailleur, { adresse: true })}
     </div>
     <div class="carte"><h2>Locataire(s)</h2>
-      ${e.locataires.map((l, i) => `
-        <div class="deux"><label class="champ">Nom<input data-bind="locataires.${i}.nom" value="${esc(l.nom)}"></label>
-        <label class="champ">Mail<input type="email" data-bind="locataires.${i}.email" value="${esc(l.email)}"></label></div>
-        ${i > 0 ? `<button type="button" class="lien danger masquer-si-signe" data-action="suppr" data-chemin="locataires" data-i="${i}">Retirer ce locataire</button>` : ""}`).join("")}
+      ${e.locataires.map((l, i) => `<div class="${i ? "element" : ""}">
+        ${e.locataires.length > 1 ? `<div class="nom"><span class="etire">Locataire ${i + 1}</span>
+          ${i > 0 ? `<button type="button" class="lien danger masquer-si-signe" data-action="suppr" data-chemin="locataires" data-i="${i}">Retirer</button>` : ""}</div>` : ""}
+        ${champsPersonne(`locataires.${i}`, l, { naissance: true, adresse: true })}</div>`).join("")}
       <button type="button" class="lien masquer-si-signe" data-action="ajout-locataire">＋ Ajouter un co-locataire</button>
     </div>
     <div class="carte"><h2>Caution(s) / garant(s)</h2>
@@ -228,15 +247,18 @@ function rendreEdl(app) {
       ${e.cautions.map((c, i) => `<div class="element">
         <div class="nom"><span class="etire">Caution ${e.cautions.length > 1 ? i + 1 : ""}</span>
           <button type="button" class="lien danger masquer-si-signe" data-action="suppr" data-chemin="cautions" data-i="${i}">Retirer</button></div>
-        <div class="deux"><label class="champ">Nom<input data-bind="cautions.${i}.nom" value="${esc(c.nom)}"></label>
-        <label class="champ">Mail<input type="email" data-bind="cautions.${i}.email" value="${esc(c.email)}"></label></div>
-        <label class="champ">Adresse<input data-bind="cautions.${i}.adresse" value="${esc(c.adresse)}"></label>
+        ${champsPersonne(`cautions.${i}`, c, { naissance: true, adresse: true })}
         ${e.locataires.length > 1 ? `<label class="champ">Se porte caution de
           <select data-bind="cautions.${i}.pour"><option value="">Tous les locataires</option>
-          ${e.locataires.map(l => `<option ${c.pour === l.nom ? "selected" : ""}>${esc(l.nom)}</option>`).join("")}</select></label>` : ""}
+          ${e.locataires.map(l => nomComplet(l)).map(n => `<option ${c.pour === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>` : ""}
       </div>`).join("")}
       <button type="button" class="lien masquer-si-signe" data-action="ajout-caution">＋ Ajouter une caution</button>
     </div>
+    ${e.locatairePrecedent ? `<div class="carte"><div class="nom ligne" style="margin-bottom:10px"><h2 class="etire" style="margin:0">Locataire précédent</h2>
+        <button type="button" class="lien danger masquer-si-signe" data-action="suppr-precedent">Retirer</button></div>
+      ${champsPersonne("locatairePrecedent", e.locatairePrecedent)}
+      <label class="champ">Date de sortie<input type="date" data-bind="locatairePrecedent.dateSortie" value="${esc(e.locatairePrecedent.dateSortie)}"></label>
+    </div>` : `<button type="button" class="masquer-si-signe" style="width:100%;justify-content:center;margin-bottom:12px" data-action="ajout-precedent">＋ Ajouter le locataire précédent</button>`}
     <div class="carte"><h2>Compteurs</h2>
       ${e.compteurs.map((c, i) => `<div class="element">
         <div class="nom"><span class="etire">${esc(c.nom)}</span>
@@ -269,7 +291,7 @@ function rendreEdl(app) {
           ${x.entree?.obs ? `<div class="obs-entree"><b>Observation d'entrée :</b> ${esc(x.entree.obs)}</div>` : ""}
           ${x.entree ? `<div class="libelle-etat">Sortie</div>` : ""}
           ${segmentEtat(`pieces.${pi}.elements.${xi}`, x.etat)}
-          <input class="plein" placeholder="Observations${x.entree ? " de sortie" : ""} (taches, trous, éclats, fonctionnement…)" data-bind="pieces.${pi}.elements.${xi}.obs" value="${esc(x.obs)}">
+          <textarea class="plein auto" rows="1" placeholder="Observations${x.entree ? " de sortie" : ""} (taches, trous, éclats, fonctionnement…)" data-bind="pieces.${pi}.elements.${xi}.obs">${esc(x.obs)}</textarea>
           ${blocPhotos(`pieces.${pi}.elements.${xi}.photos`, x.photos)}</div>`).join("")}
         <div class="element masquer-si-signe ligne">
           <button type="button" data-action="ajout-element" data-pi="${pi}">＋ Élément</button>
@@ -278,15 +300,24 @@ function rendreEdl(app) {
     }).join("")}
     <button type="button" class="masquer-si-signe" style="width:100%;justify-content:center;margin-bottom:12px" data-action="ajout-piece">＋ Ajouter une pièce</button>
     <div class="carte"><h2>Observations générales</h2>
-      <textarea class="plein" data-bind="observations" placeholder="Réserves, travaux convenus, équipements fournis…">${esc(e.observations)}</textarea></div>
+      <textarea class="plein auto" rows="3" data-bind="observations" placeholder="Réserves, travaux convenus, équipements fournis…">${esc(e.observations)}</textarea></div>
   </fieldset>
   </main>
   <div class="barre-bas">
     <button data-action="pdf">📄 PDF</button>
     <button class="principal" data-action="signatures">✍︎ Signatures (${nbSig}/${sigs.length})</button>
   </div>`;
+  ajusterZones(app);
   chargerVignettes(app);
 }
+
+/** Les zones de commentaire s'agrandissent avec leur texte. */
+function ajusterHauteur(t) {
+  if (!t.offsetParent) return;   // masquée (pièce repliée) : ajustée à l'ouverture
+  t.style.height = "auto";
+  t.style.height = t.scrollHeight + 2 + "px";
+}
+const ajusterZones = racine => racine.querySelectorAll("textarea.auto").forEach(ajusterHauteur);
 
 async function chargerVignettes(racine) {
   for (const img of racine.querySelectorAll("img[data-photo-id]:not([src])"))
@@ -295,8 +326,7 @@ async function chargerVignettes(racine) {
 
 // --- Actions ----------------------------------------------------------------------------------------
 async function ouvrirEdl(id) {
-  ui.edl = await lire("edl", id);
-  ui.edl.cautions ||= [];   // états des lieux créés avant l'ajout des cautions
+  ui.edl = normaliser(await lire("edl", id));
   ui.page = "edl";
   ui.piecesOuvertes.clear();
   ui.pdf = null;
@@ -313,9 +343,11 @@ function creerEdl(source, type) {
     logement: [L.logement, ...(L.annexes || [])].filter(Boolean).join(" + "),
     ville: L.ville_signature || reglages.ville,
     dateEntree: L.date_entree || "",
-    bailleur: { nom: L.bailleur || reglages.nom, adresse: L.adresse_bailleur || reglages.adresse, email: reglages.email },
-    locataires: [{ nom: L.nom || "", email: (L.emails || [])[0] || "" }],
-    cautions: [],
+    bailleur: L.bailleur
+      ? { nom: L.bailleur, prenom: "", telephone: reglages.telephone || "", email: reglages.email, adresse: L.adresse_bailleur || reglages.adresse }
+      : { nom: reglages.nom, prenom: reglages.prenom || "", telephone: reglages.telephone || "", email: reglages.email, adresse: reglages.adresse },
+    locataires: [{ ...personneVide(), nom: L.nom || "", email: (L.emails || [])[0] || "" }],
+    cautions: [], locatairePrecedent: null,
     compteurs: (L.compteurs || COMPTEURS_DEFAUT.map(n => ({ nom: n, dernier: "" })))
       .map(c => ({ nom: c.nom, numero: "", index: "", dernier: c.dernier || "", photos: [] })),
     cles: CLES.map(n => ({ nom: n, nombre: "" })),
@@ -371,14 +403,14 @@ async function dialogueNouveau() {
   let type = "entree";
   const majReprise = () => {
     const L = locs[m.querySelector("#n-loc").value];
-    const duLocataire = x => !!L && (x.locataireRef === L.id || x.locataires.some(t => t.nom && t.nom === L.nom));
+    const duLocataire = x => !!L && (x.locataireRef === L.id || x.locataires.some(t => t.nom && (t.nom === L.nom || nomComplet(t) === L.nom)));
     // toutes les entrées, celles du locataire choisi en premier (pré-sélectionnées)
     const entrees = edls.filter(x => x.type === "entree")
       .sort((a, b) => duLocataire(b) - duLocataire(a) || b.date.localeCompare(a.date));
     const bloc = m.querySelector("#n-reprise-bloc");
     bloc.hidden = type !== "sortie" || !entrees.length;
     m.querySelector("#n-reprise").innerHTML = `<option value="">Non, partir d'un modèle vierge</option>` + entrees.map(x =>
-      `<option value="${x.id}" ${duLocataire(x) && x === entrees[0] ? "selected" : ""}>${esc(x.locataires.map(t => t.nom).join(", ") || "Sans nom")}
+      `<option value="${x.id}" ${duLocataire(x) && x === entrees[0] ? "selected" : ""}>${esc(x.locataires.map(nomComplet).filter(Boolean).join(", ") || "Sans nom")}
         – entrée du ${fmtDate(x.date)}${x.logement ? " – " + esc(x.logement) : ""}${x.statut === "signe" ? " (signé)" : ""}</option>`).join("");
   };
   const choisirType = t => {
@@ -515,9 +547,9 @@ function dialogueSignatures() {
   const e = ui.edl;
   const sigs = signataires(e);
   const manque = [];
-  if (!e.bailleur.nom.trim()) manque.push("le nom du propriétaire");
-  if (e.locataires.some(l => !l.nom.trim())) manque.push("le nom du (des) locataire(s)");
-  if (e.cautions.some(c => !c.nom.trim())) manque.push("le nom de la (des) caution(s)");
+  if (!(e.bailleur.nom || "").trim()) manque.push("le nom du propriétaire");
+  if (e.locataires.some(l => !(l.nom || "").trim())) manque.push("le nom du (des) locataire(s)");
+  if (e.cautions.some(c => !(c.nom || "").trim())) manque.push("le nom de la (des) caution(s)");
   const nonRemplis = e.pieces.reduce((n, p) => n + p.elements.filter(x => !x.etat).length, 0);
   const m = modal(`
     <h2 style="margin-top:0">Signatures</h2>
@@ -615,9 +647,9 @@ async function genererPdf(e) {
   const signe = e.statut === "signe";
   let y = M;
 
-  // Numérotation des photos (annexe)
-  const photos = [];
-  const refs = (ids, legende) => (ids || []).map(id => { photos.push({ id, legende }); return "P" + photos.length; }).join(", ");
+  // Numérotation des photos : chaque section (compteurs, pièce) est suivie de ses propres photos.
+  let numero = 0, aDessiner = [];
+  const refs = (ids, legende) => (ids || []).map(id => { aDessiner.push({ id, n: ++numero, legende }); return "P" + numero; }).join(", ");
 
   const titre = sortie ? "ÉTAT DES LIEUX DE SORTIE" : "ÉTAT DES LIEUX D'ENTRÉE";
   doc.setFont("helvetica", "bold"); doc.setFontSize(16);
@@ -636,7 +668,7 @@ async function genererPdf(e) {
 
   const tableau = ({ styles, ...opts }) => {
     doc.autoTable(Object.assign({
-      startY: y, theme: "grid", margin: { left: M, right: M },
+      startY: y, theme: "grid", margin: { left: M, right: M }, rowPageBreak: "avoid",
       styles: Object.assign({ font: "helvetica", fontSize: 9, cellPadding: 1.8, lineColor: [160, 160, 160], lineWidth: 0.1,
         textColor: 20, overflow: "linebreak" }, styles),
       headStyles: { fillColor: [236, 239, 241], textColor: 20, fontStyle: "bold" },
@@ -649,16 +681,53 @@ async function genererPdf(e) {
     doc.text(T(t), M, y); y += 2;
     doc.setFont("helvetica", "normal");
   };
+  /** Photos de la section qui vient d'être écrite, en grille de 3 sous son tableau. */
+  const photosSection = async () => {
+    const liste = aDessiner;
+    aDessiner = [];
+    if (!liste.length) return;
+    const ecart = 4, lc = (LARG - 2 * ecart) / 3, hmax = 46, hLigne = hmax + 11;
+    y -= 2;
+    for (let i = 0; i < liste.length; i++) {
+      const col = i % 3;
+      if (col === 0 && y + hLigne > H - 14) { doc.addPage(); y = M; }
+      const rec = await lire("photos", liste[i].id);
+      const x = M + col * (lc + ecart);
+      if (rec) {
+        const img = await chargerImage(rec.blob);
+        const r = Math.min(lc / img.w, hmax / img.h);
+        doc.addImage(img.data, "JPEG", x, y, img.w * r, img.h * r, undefined, "FAST");
+        doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(60);
+        doc.text(T(`P${liste[i].n} - ${liste[i].legende} (${fmtDate(rec.date)} ${fmtHeure(rec.date)})`), x, y + img.h * r + 3.5, { maxWidth: lc });
+        doc.setTextColor(0);
+      }
+      if (col === 2 || i === liste.length - 1) y += hLigne;
+    }
+    y += 2;
+  };
 
+  // Parties : une ligne par personne (rôle | identité et coordonnées)
+  const fiche = (p, extra = []) => [
+    nomComplet(p) || "-",
+    p.naissanceDate || p.naissanceLieu ? `Né(e) le ${fmtDate(p.naissanceDate) || "-"}${p.naissanceLieu ? " à " + p.naissanceLieu : ""}` : "",
+    p.adresse || "",
+    [p.telephone && `Tél. : ${p.telephone}`, p.email && `Mail : ${p.email}`].filter(Boolean).join("   "),
+    ...extra,
+  ].filter(Boolean).join("\n");
+  const numeroter = (liste, mot) => liste.length > 1 ? (i => `${mot} ${i + 1}`) : (() => mot);
+  const roleLoc = numeroter(e.locataires, "Locataire"), roleCau = numeroter(e.cautions, "Caution (garant)");
+  const parties = [
+    ["Propriétaire", fiche(e.bailleur)],
+    ...e.locataires.map((l, i) => [roleLoc(i), fiche(l)]),
+    ...e.cautions.map((c, i) => [roleCau(i), fiche(c, c.pour ? [`Se porte caution de ${c.pour}`] : [])]),
+    ...(e.locatairePrecedent ? [["Locataire précédent", fiche(e.locatairePrecedent,
+      e.locatairePrecedent.dateSortie ? [`Sorti le ${fmtDate(e.locatairePrecedent.dateSortie)}`] : [])]] : []),
+    ["Logement", `${e.logement}${e.adresse ? "\n" + e.adresse : ""}\nDate d'entrée dans les lieux : ${fmtDate(e.dateEntree) || "-"}`
+      + (sortie ? `\nDate de l'état des lieux de sortie : ${fmtDate(e.date)}` : "")],
+  ];
   tableau({
-    body: [[
-      { content: T(`Propriétaire\n${e.bailleur.nom}\n${e.bailleur.adresse || ""}${e.bailleur.email ? "\n" + e.bailleur.email : ""}`) },
-      { content: T(`Locataire${e.locataires.length > 1 ? "s" : ""}\n` + e.locataires.map(l => l.nom + (l.email ? ` (${l.email})` : "")).join("\n")) },
-    ], ...(e.cautions.length ? [[{ colSpan: 2, content: T(`Caution${e.cautions.length > 1 ? "s" : ""} (garant${e.cautions.length > 1 ? "s" : ""})\n` +
-        e.cautions.map(c => [c.nom, c.adresse, c.email, c.pour ? `caution de ${c.pour}` : ""].filter(Boolean).join(" - ")).join("\n")) }]] : []),
-    [{ colSpan: 2, content: T(`Logement : ${e.logement}${e.adresse ? " - " + e.adresse : ""}\nDate d'entrée dans les lieux : ${fmtDate(e.dateEntree) || "-"}`
-        + (sortie ? `\nDate de l'état des lieux de sortie : ${fmtDate(e.date)}` : "")) }]],
-    columnStyles: { 0: { cellWidth: LARG / 2 } },
+    body: parties.map(r => r.map(T)),
+    columnStyles: { 0: { cellWidth: 42, fontStyle: "bold", fillColor: [246, 248, 249] } },
   });
 
   titreSection("Relevé des compteurs");
@@ -666,6 +735,7 @@ async function genererPdf(e) {
     head: [["Compteur", "N° du compteur", "Relevé précédent", "Index relevé ce jour", "Photos"].map(T)],
     body: e.compteurs.map(c => [c.nom, c.numero, c.dernier, c.index, refs(c.photos, `Compteur ${c.nom}`)].map(T)),
   });
+  await photosSection();
 
   titreSection("Clés et accès remis");
   tableau({
@@ -674,12 +744,12 @@ async function genererPdf(e) {
   });
 
   for (const p of e.pieces) {
-    titreSection(p.nom + (p.photos.length ? `   (vue d'ensemble : ${refs(p.photos, p.nom)})` : ""));
+    titreSection(p.nom + (p.photos.length ? `   (vue d'ensemble : ${refs(p.photos, "Vue d'ensemble")})` : ""));
     tableau({
       // Sortie : la notation et l'observation d'entrée figurent sous celles de sortie, dans la même case.
       head: [(sortie ? ["Élément", "État\nsortie / entrée", "Observations", "Photos"] : ["Élément", "État", "Observations", "Photos"]).map(T)],
       body: p.elements.map(x => {
-        const ph = refs(x.photos, `${p.nom} - ${x.nom}`);
+        const ph = refs(x.photos, x.nom);
         const etat = x.entree ? `${x.etat || "-"}\nEntrée : ${x.entree.etat || "-"}` : (x.etat || "-");
         const obs = x.entree?.obs ? `${x.obs}${x.obs ? "\n" : ""}Entrée : ${x.entree.obs}` : x.obs;
         return [x.nom, etat, obs, ph].map(T);
@@ -706,6 +776,7 @@ async function genererPdf(e) {
         doc.setTextColor(0); doc.setFont("helvetica", "normal"); doc.setFontSize(9);
       },
     });
+    await photosSection();
   }
 
   titreSection("Observations générales");
@@ -743,36 +814,12 @@ async function genererPdf(e) {
   });
   y += nbLignes * (hauteurSig + 4);
 
-  // Annexe photos
-  if (photos.length) {
-    doc.addPage(); y = M;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(13);
-    doc.text(T(`Annexe - Photos (${photos.length})`), M, y + 3); y += 10;
-    const lc = (LARG - 6) / 2, hmax = 78;
-    let col = 0, hLigne = 0;
-    for (let i = 0; i < photos.length; i++) {
-      const rec = await lire("photos", photos[i].id);
-      if (!rec) continue;
-      const img = await chargerImage(rec.blob);
-      const r = Math.min(lc / img.w, hmax / img.h);
-      const w = img.w * r, h = img.h * r;
-      if (col === 0 && y + h + 10 > H - 12) { doc.addPage(); y = M; }
-      const x = M + col * (lc + 6);
-      doc.addImage(img.data, "JPEG", x, y, w, h, undefined, "FAST");
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8);
-      doc.text(T(`P${i + 1} - ${photos[i].legende} (${fmtDate(rec.date)} ${fmtHeure(rec.date)})`), x, y + h + 4, { maxWidth: lc });
-      hLigne = Math.max(hLigne, h + 9);
-      col++;
-      if (col === 2) { col = 0; y += hLigne; hLigne = 0; }
-    }
-  }
-
   // Pied de page
   const n = doc.getNumberOfPages();
   for (let i = 1; i <= n; i++) {
     doc.setPage(i);
     doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(110);
-    doc.text(T(`État des lieux de ${libelleType(e)} - ${e.logement} - ${e.locataires.map(l => l.nom).join(", ")}`), M, H - 7, { maxWidth: LARG - 30 });
+    doc.text(T(`État des lieux de ${libelleType(e)} - ${e.logement} - ${e.locataires.map(nomComplet).join(", ")}`), M, H - 7, { maxWidth: LARG - 30 });
     doc.text(`${i} / ${n}`, W - M, H - 7, { align: "right" });
     doc.setTextColor(0);
   }
@@ -781,7 +828,7 @@ async function genererPdf(e) {
 
 function nomFichier(e) {
   const propre = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w .-]+/g, "_").trim();
-  return `Etat des lieux ${e.type === "sortie" ? "sortie" : "entree"} - ${propre(e.locataires.map(l => l.nom).join(" et ") || "locataire")} - ${e.date}.pdf`;
+  return `Etat des lieux ${e.type === "sortie" ? "sortie" : "entree"} - ${propre(e.locataires.map(nomComplet).filter(Boolean).join(" et ") || "locataire")} - ${e.date}.pdf`;
 }
 
 const destinataires = e => [...e.locataires.map(l => l.email), ...e.cautions.map(c => c.email), e.bailleur.email].map(s => (s || "").trim()).filter(Boolean);
@@ -823,7 +870,7 @@ async function dialoguePdf() {
     try { await navigator.clipboard.writeText(liste); } catch (_) { /* presse-papiers refusé */ }
     const sujet = `État des lieux de ${libelleType(e)} – ${e.logement}`;
     const texte = `Bonjour,\n\nVeuillez trouver ci-joint l'état des lieux de ${libelleType(e)} du ${fmtDate(e.date)} ` +
-      `(${e.logement}${e.adresse ? ", " + e.adresse : ""}), signé par les parties.\n\nCordialement,\n${e.bailleur.nom}`;
+      `(${e.logement}${e.adresse ? ", " + e.adresse : ""}), signé par les parties.\n\nCordialement,\n${nomComplet(e.bailleur)}`;
     if (navigator.canShare && navigator.canShare({ files: [f] })) {
       try {
         await navigator.share({ files: [f], title: sujet, text: texte });
@@ -843,6 +890,7 @@ async function dialoguePdf() {
 // --- Événements ---------------------------------------------------------------------------------------
 document.addEventListener("input", ev => {
   const t = ev.target;
+  if (t.matches("textarea.auto")) ajusterHauteur(t);
   if (t.dataset.bind && ui.edl) {
     setPath(ui.edl, t.dataset.bind, t.value);
     ui.pdf = null;
@@ -856,6 +904,7 @@ document.addEventListener("input", ev => {
 document.addEventListener("toggle", ev => {
   const d = ev.target;
   if (d.dataset?.piece) d.open ? ui.piecesOuvertes.add(d.dataset.piece) : ui.piecesOuvertes.delete(d.dataset.piece);
+  if (d.open) ajusterZones(d);
 }, true);
 
 document.addEventListener("change", async ev => {
@@ -916,8 +965,12 @@ document.addEventListener("click", async ev => {
       }
       break;
     }
-    case "ajout-locataire": structure(() => e.locataires.push({ nom: "", email: "" })); break;
-    case "ajout-caution": structure(() => e.cautions.push({ nom: "", email: "", adresse: "", pour: "" })); break;
+    case "ajout-locataire": structure(() => e.locataires.push(personneVide())); break;
+    case "ajout-caution": structure(() => e.cautions.push({ ...personneVide(), adresse: "", pour: "" })); break;
+    case "ajout-precedent": structure(() => e.locatairePrecedent = { nom: "", prenom: "", telephone: "", email: "", dateSortie: "" }); break;
+    case "suppr-precedent":
+      if (await confirmer("Retirer la section « Locataire précédent » ?", "Retirer")) structure(() => e.locatairePrecedent = null);
+      break;
     case "ajout-cle": structure(() => e.cles.push({ nom: "", nombre: "" })); break;
     case "ajout-compteur": {
       const presents = e.compteurs.map(c => c.nom);
@@ -955,7 +1008,7 @@ document.addEventListener("click", async ev => {
         structure(() => { e.signatures = {}; e.statut = "brouillon"; delete e.signeLe; });
       break;
     case "menu-edl": {
-      const m = modal(`<h2 style="margin-top:0">${esc(e.locataires[0]?.nom || "État des lieux")}</h2>
+      const m = modal(`<h2 style="margin-top:0">${esc(nomComplet(e.locataires[0]) || "État des lieux")}</h2>
         ${e.type === "entree" ? `<button class="principal" style="width:100%;justify-content:center;margin-bottom:8px" id="m-sortie">
           Créer l'état des lieux de sortie</button>
           <p class="doux" style="margin:0 0 12px">Reprend les parties, les pièces et les clés ; chaque notation d'entrée s'affiche sous celle de sortie.</p>` : ""}
