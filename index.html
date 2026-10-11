@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>État des lieux</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="État des lieux">
+<meta name="theme-color" content="#1976d2">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icone-180.png">
+<link rel="icon" href="icone-192.png">
+<style>
+:root {
+  --fond: #f4f6f8; --carte: #ffffff; --texte: #263238; --doux: #607d8b; --bord: #dde3e8;
+  --bleu: #1976d2; --bleu-clair: #e3f2fd; --vert: #2e7d32; --rouge: #c62828; --orange: #ef6c00;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --fond: #101418; --carte: #1b2127; --texte: #e6edf2; --doux: #90a4ae; --bord: #2c353d;
+          --bleu: #64b5f6; --bleu-clair: #1d3448; --vert: #81c784; --rouge: #ef9a9a; --orange: #ffb74d; }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: var(--fond); color: var(--texte);
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+body { padding: env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 80px); }
+header { position: sticky; top: 0; z-index: 10; background: var(--fond); padding: 10px 16px 8px;
+  display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--bord); }
+header h1 { font-size: 19px; margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+main { padding: 12px 16px; max-width: 760px; margin: 0 auto; }
+button, .bouton { font: inherit; border: 1px solid var(--bord); background: var(--carte); color: var(--texte);
+  border-radius: 10px; padding: 9px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+button.principal { background: var(--bleu); color: #fff; border: none; font-weight: 600; }
+button.danger { color: var(--rouge); }
+button.lien { border: none; background: none; color: var(--bleu); padding: 6px 4px; }
+button:disabled { opacity: .45; }
+.carte { background: var(--carte); border: 1px solid var(--bord); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.carte h2 { font-size: 17px; margin: 0 0 10px; }
+.liste-edl .carte { display: block; width: 100%; text-align: left; }
+.puce { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 9px; background: var(--bleu-clair); color: var(--bleu); }
+.puce.signe { background: #e8f5e9; color: #2e7d32; }
+.doux { color: var(--doux); font-size: 14px; }
+button.puce-choix { font-size: 14px; padding: 6px 10px; border-radius: 16px; background: var(--bleu-clair); color: var(--bleu); border: none; }
+label.champ { display: block; margin-bottom: 10px; font-size: 14px; color: var(--doux); }
+label.champ input, label.champ textarea, label.champ select, input.plein, textarea.plein {
+  display: block; width: 100%; margin-top: 4px; font: inherit; font-size: 16px; color: var(--texte);
+  background: var(--fond); border: 1px solid var(--bord); border-radius: 8px; padding: 9px 10px; }
+textarea { min-height: 64px; resize: vertical; }
+.ligne { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.etire { flex: 1; min-width: 0; }
+.element .nom button.danger { color: var(--doux); }
+.deux { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.segment { display: flex; border: 1px solid var(--bord); border-radius: 9px; overflow: hidden; }
+.segment button { border: none; border-radius: 0; flex: 1; justify-content: center; padding: 8px 6px; font-size: 14px; }
+.segment button + button { border-left: 1px solid var(--bord); }
+.segment button.actif { background: var(--bleu); color: #fff; font-weight: 600; }
+.segment button.actif.e-Mauvais { background: var(--rouge); }
+.segment button.actif.e-Usé { background: var(--orange); }
+.segment button.actif.e-Bon { background: var(--vert); }
+.libelle-etat { font-size: 12px; font-weight: 600; color: var(--doux); text-transform: uppercase; letter-spacing: .04em; margin: 6px 0 3px; }
+.segment.lecture { margin-bottom: 4px; background: var(--fond); }
+.segment.lecture span { flex: 1; text-align: center; padding: 4px; font-size: 13px; color: var(--doux); }
+.segment.lecture span + span { border-left: 1px solid var(--bord); }
+.segment.lecture span.actif { font-weight: 700; color: #fff; background: var(--doux); }
+.segment.lecture span.actif.e-Bon { background: #81c784; }
+.segment.lecture span.actif.e-Usé { background: #ffb74d; }
+.segment.lecture span.actif.e-Mauvais { background: #e57373; }
+.segment.lecture span.actif.e-Neuf { background: #64b5f6; }
+.obs-entree { font-size: 13px; color: var(--doux); margin: 4px 0 6px; padding: 6px 8px; border-left: 3px solid var(--doux);
+  background: var(--fond); border-radius: 0 6px 6px 0; }
+details.piece { background: var(--carte); border: 1px solid var(--bord); border-radius: 14px; margin-bottom: 10px; }
+details.piece > summary { list-style: none; padding: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+details.piece > summary::-webkit-details-marker { display: none; }
+details.piece > summary::after { content: "›"; margin-left: auto; font-size: 22px; color: var(--doux); transition: transform .2s; }
+details.piece[open] > summary::after { transform: rotate(90deg); }
+.piece-corps { padding: 0 14px 14px; }
+.element { border-top: 1px solid var(--bord); padding: 12px 0; }
+.element .nom { font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; }
+.element .entree { font-size: 13px; color: var(--doux); margin-bottom: 6px; }
+.photos { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.photos .vignette { position: relative; width: 74px; height: 74px; border-radius: 8px; overflow: hidden; background: var(--bord); }
+.photos .vignette img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photos .vignette button { position: absolute; top: 2px; right: 2px; padding: 0; width: 24px; height: 24px; justify-content: center;
+  border-radius: 12px; background: rgba(0,0,0,.6); color: #fff; border: none; font-size: 14px; }
+.ajout-photo { width: 74px; height: 74px; border: 2px dashed var(--bord); border-radius: 8px; display: flex;
+  align-items: center; justify-content: center; font-size: 26px; color: var(--doux); position: relative; }
+.ajout-photo input { position: absolute; inset: 0; opacity: 0; }
+.barre-bas { position: fixed; left: 0; right: 0; bottom: 0; background: var(--carte); border-top: 1px solid var(--bord);
+  padding: 10px 16px calc(env(safe-area-inset-bottom) + 10px); display: flex; gap: 8px; z-index: 10; }
+.barre-bas button { flex: 1; justify-content: center; }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+.modal .boite { background: var(--carte); width: 100%; max-width: 760px; border-radius: 16px 16px 0 0;
+  padding: 16px 16px calc(env(safe-area-inset-bottom) + 16px); max-height: 92vh; overflow: auto; }
+.zone-signature { width: 100%; height: 220px; background: #fff; border: 2px dashed #b0bec5; border-radius: 10px; touch-action: none; display: block; }
+.signature-ok img { max-width: 160px; max-height: 70px; background: #fff; border-radius: 6px; }
+.signataire { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--bord); }
+.signataire:first-of-type { border-top: none; }
+.vide { text-align: center; padding: 40px 10px; color: var(--doux); }
+.toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 90px); transform: translateX(-50%);
+  background: #263238; color: #fff; padding: 10px 16px; border-radius: 10px; z-index: 60; font-size: 14px; max-width: 90vw; }
+.attente { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 70; display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 600; }
+.verrou { background: #e8f5e9; color: #1b5e20; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 14px; }
+@media (prefers-color-scheme: dark) { .verrou { background: #1b3320; color: #a5d6a7; } .puce.signe { background: #1b3320; color: #a5d6a7; } }
+fieldset { border: none; margin: 0; padding: 0; }
+fieldset:disabled .masquer-si-signe { display: none; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
